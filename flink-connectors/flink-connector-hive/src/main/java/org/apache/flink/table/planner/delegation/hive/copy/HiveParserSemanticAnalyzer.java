@@ -102,6 +102,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -867,6 +868,13 @@ public class HiveParserSemanticAnalyzer {
             case HiveASTParser.TOK_LATERAL_VIEW:
             case HiveASTParser.TOK_LATERAL_VIEW_OUTER:
                 alias = processLateralView(qb, next);
+                break;
+            case HiveASTParser.TOK_JOIN:
+                processJoin(qb, next);
+                qb.getParseInfo().setJoinExpr(next);
+                // here, we use a UUID as alias to avoid potential
+                // conflict with the alias in user sql
+                alias = UUID.randomUUID().toString();
                 break;
             default:
                 throw new SemanticException(

@@ -938,6 +938,32 @@ public class HiveDialectQueryITCase {
         }
     }
 
+    @Test
+    public void testJoinLateralView() throws Exception {
+        tableEnv.executeSql("create table bookstore_topic(topic_id int, book_id_list array<int>)");
+        tableEnv.executeSql("create table topic_comment_book(group_id int)");
+        try {
+            tableEnv.executeSql("insert into topic_comment_book values (1), (2)").await();
+            tableEnv.executeSql("insert into bookstore_topic select 1, array(1, 2, 3, 1)").await();
+
+            List<Row> rows =
+                    CollectionUtil.iteratorToList(
+                            tableEnv.executeSql(
+                                            "SELECT topic_book_id, count(topic_book_id) \n"
+                                                    + "  FROM  (topic_comment_book\n"
+                                                    + "  JOIN    bookstore_topic\n"
+                                                    + "  ON      topic_comment_book.group_id = bookstore_topic.topic_id)\n"
+                                                    + "  LATERAL VIEW\n"
+                                                    + "  EXPLODE(book_id_list) bid AS topic_book_id\n"
+                                                    + "  GROUP BY topic_book_id ORDER BY topic_book_id")
+                                    .collect());
+            assertThat(rows.toString()).isEqualTo("[+I[1, 2], +I[2, 1], +I[3, 1]]");
+        } finally {
+            tableEnv.executeSql("drop table bookstore_topic");
+            tableEnv.executeSql("drop table topic_comment_book");
+        }
+    }
+
     private void runQFile(File qfile) throws Exception {
         QTest qTest = extractQTest(qfile);
         for (int i = 0; i < qTest.statements.size(); i++) {
