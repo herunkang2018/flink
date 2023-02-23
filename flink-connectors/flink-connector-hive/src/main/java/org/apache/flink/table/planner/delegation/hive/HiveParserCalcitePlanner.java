@@ -2878,6 +2878,10 @@ public class HiveParserCalcitePlanner {
         String alias = entry.getKey();
         RelNode res = null;
         List<HiveParserASTNode> lateralViews = entry.getValue();
+        if (qb.getParseInfo().getJoinExpr() != null) {
+            RelNode joinRelNode = genJoinLogicalPlan(qb.getParseInfo().getJoinExpr(), aliasToRel);
+            aliasToRel.put(alias, joinRelNode);
+        }
         for (HiveParserASTNode lateralView : lateralViews) {
             Preconditions.checkArgument(lateralView.getChildCount() == 2);
             final boolean isOuter = lateralView.getType() == HiveASTParser.TOK_LATERAL_VIEW_OUTER;

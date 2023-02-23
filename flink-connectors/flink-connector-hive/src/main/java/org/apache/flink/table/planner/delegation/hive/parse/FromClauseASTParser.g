@@ -107,12 +107,12 @@ atomjoinSource
     |
     partitionedTableFunction (lateralView^)*
     |
-    LPAREN! joinSource RPAREN!
+    LPAREN! joinSource RPAREN! (lateralView^)*
     ;
 
 joinSource
     :
-    atomjoinSource (joinToken^ joinSourcePart (KW_ON! expression {$joinToken.start.getType() != COMMA}? | KW_USING! columnParenthesesList {$joinToken.start.getType() != COMMA}?)?)*
+    atomjoinSource (joinToken^ joinSourcePart (KW_ON! expression {$joinToken.start.getType() != COMMA}? | KW_USING! columnParenthesesList {$joinToken.start.getType() != COMMA}?)?)* (lateralView^)*
     ;
 
 joinSourcePart
