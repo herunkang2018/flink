@@ -114,6 +114,7 @@ import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
@@ -904,28 +905,32 @@ public class HiveParserBaseSemanticAnalyzer {
         return ret;
     }
 
-    // This function is a wrapper of parseInfo.getGroupByForClause which automatically translates
-    // SELECT DISTINCT a,b,c to SELECT a,b,c GROUP BY a,b,c.
+    /**
+     * Returns the GBY, if present; DISTINCT, if present, will be handled when generating the
+     * SELECT.
+     */
     public static List<HiveParserASTNode> getGroupByForClause(
             HiveParserQBParseInfo parseInfo, String dest) {
-        if (parseInfo.getSelForClause(dest).getToken().getType() == HiveASTParser.TOK_SELECTDI) {
-            HiveParserASTNode selectExprs = parseInfo.getSelForClause(dest);
-            List<HiveParserASTNode> result =
-                    new ArrayList<>(selectExprs == null ? 0 : selectExprs.getChildCount());
-            if (selectExprs != null) {
-                for (int i = 0; i < selectExprs.getChildCount(); ++i) {
-                    if (((HiveParserASTNode) selectExprs.getChild(i)).getToken().getType()
-                            == HiveASTParser.QUERY_HINT) {
-                        continue;
-                    }
-                    // table.column AS alias
-                    HiveParserASTNode grpbyExpr =
-                            (HiveParserASTNode) selectExprs.getChild(i).getChild(0);
-                    result.add(grpbyExpr);
+        HiveParserASTNode selectExpr = parseInfo.getSelForClause(dest);
+        Collection<HiveParserASTNode> aggregateFunction =
+                parseInfo.getDestToAggregationExprs().get(dest).values();
+        if (isSelectDistinct(selectExpr)
+                && !hasGroupBySibling(selectExpr)
+                && !isAggregateInSelect(selectExpr, aggregateFunction)) {
+            List<HiveParserASTNode> result = new ArrayList<>(selectExpr.getChildCount());
+            for (int i = 0; i < selectExpr.getChildCount(); ++i) {
+                if (((HiveParserASTNode) selectExpr.getChild(i)).getToken().getType()
+                        == HiveASTParser.QUERY_HINT) {
+                    continue;
                 }
+                // table.column AS alias
+                HiveParserASTNode grpbyExpr =
+                        (HiveParserASTNode) selectExpr.getChild(i).getChild(0);
+                result.add(grpbyExpr);
             }
             return result;
         } else {
+            // look for a true GBY
             HiveParserASTNode grpByExprs = parseInfo.getGroupByForClause(dest);
             List<HiveParserASTNode> result =
                     new ArrayList<>(grpByExprs == null ? 0 : grpByExprs.getChildCount());
@@ -939,6 +944,38 @@ public class HiveParserBaseSemanticAnalyzer {
             }
             return result;
         }
+    }
+
+    public static boolean hasGroupBySibling(HiveParserASTNode selectExpr) {
+        boolean isGroupBy = false;
+        if (selectExpr.getParent() != null && selectExpr.getParent() instanceof Node) {
+            for (Node sibling : ((Node) selectExpr.getParent()).getChildren()) {
+                isGroupBy |=
+                        sibling instanceof HiveParserASTNode
+                                && ((HiveParserASTNode) sibling).getType()
+                                        == HiveASTParser.TOK_GROUPBY;
+            }
+        }
+        return isGroupBy;
+    }
+
+    public static boolean isSelectDistinct(HiveParserASTNode expr) {
+        return expr.getType() == HiveASTParser.TOK_SELECTDI;
+    }
+
+    protected static boolean isAggregateInSelect(
+            Node node, Collection<HiveParserASTNode> aggregateFunction) {
+        if (node.getChildren() == null) {
+            return false;
+        }
+
+        for (Node child : node.getChildren()) {
+            if (aggregateFunction.contains(child)
+                    || isAggregateInSelect(child, aggregateFunction)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static String getAliasId(String alias, HiveParserQB qb) {

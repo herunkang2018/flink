@@ -371,6 +371,10 @@ public class HiveParserQBParseInfo {
         return destToLimit.get(dest) == null ? null : destToLimit.get(dest).getValue();
     }
 
+    public Map<String, LinkedHashMap<String, HiveParserASTNode>> getDestToAggregationExprs() {
+        return destToAggregationExprs;
+    }
+
     // for fast check of possible existence of RS (will be checked again in SimpleFetchOptimizer)
     public boolean isSimpleSelectQuery() {
         if (joinExpr != null

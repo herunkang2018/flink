@@ -149,6 +149,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.apache.flink.table.planner.delegation.hive.HiveParserUtils.generateErrorMessage;
 import static org.apache.flink.table.planner.delegation.hive.HiveParserUtils.rewriteGroupingFunctionAST;
@@ -2436,7 +2437,38 @@ public class HiveParserCalcitePlanner {
                             relToHiveColNameCalcitePosMap);
         }
 
+        selExprList = qbp.getSelForClause(selClauseName);
+        if (HiveParserBaseSemanticAnalyzer.isSelectDistinct(selExprList)
+                && HiveParserBaseSemanticAnalyzer.hasGroupBySibling(selExprList)) {
+            res = genGBSelectDistinctPlan(res, outRR);
+        }
         return res;
+    }
+
+    private RelNode genGBSelectDistinctPlan(RelNode srcRel, HiveParserRowResolver inputRR) {
+
+        RelDataType inputRT = srcRel.getRowType();
+        List<Integer> groupSetPositions =
+                IntStream.range(0, inputRT.getFieldCount()).boxed().collect(Collectors.toList());
+
+        RelNode distAgg =
+                LogicalAggregate.create(
+                        srcRel,
+                        new ArrayList<>(),
+                        ImmutableBitSet.of(groupSetPositions),
+                        null,
+                        new ArrayList<>());
+
+        // This comes from genSelectLogicalPlan, must be a project assert srcRel instanceof
+        // HiveProject;
+        HiveParserRowResolver outputRR = inputRR;
+        if (outputRR == null) {
+            outputRR = relToRowResolver.get(srcRel);
+        }
+
+        relToRowResolver.put(distAgg, outputRR);
+        relToHiveColNameCalcitePosMap.put(distAgg, relToHiveColNameCalcitePosMap.get(srcRel));
+        return distAgg;
     }
 
     // flink doesn't support type NULL, so we need to convert such literals
