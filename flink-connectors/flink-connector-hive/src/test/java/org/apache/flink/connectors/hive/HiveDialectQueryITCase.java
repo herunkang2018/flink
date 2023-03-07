@@ -938,6 +938,45 @@ public class HiveDialectQueryITCase {
         }
     }
 
+    @Test
+    public void testUDTFAndOtherExpressions() throws Exception {
+        tableEnv.executeSql(
+                "create table app_toc_life_new_merchant_poi_list_df (p_account_id int, poi_list array<int>)");
+
+        try {
+            tableEnv.executeSql(
+                            "insert into app_toc_life_new_merchant_poi_list_df select 1, array(1, 2, 3)")
+                    .await();
+            tableEnv.executeSql(
+                            "insert into app_toc_life_new_merchant_poi_list_df select 2, array(1, 2, 3)")
+                    .await();
+
+            List<Row> rows =
+                    CollectionUtil.iteratorToList(
+                            tableEnv.executeSql(
+                                            "SELECT "
+                                                    + " concat('t.', pk_str) AS `key1`,"
+                                                    + "  explode(datapool) as (field1, val1), "
+                                                    + "concat('t.', pk_str) AS `key2` \n"
+                                                    + "FROM(\n"
+                                                    + "        SELECT\n"
+                                                    + "            concat_ws('.', CAST(p_account_id AS string)) AS pk_str,\n"
+                                                    + "            map(\n"
+                                                    + "                    'poi_list', poi_list\n"
+                                                    + "                ) AS datapool\n"
+                                                    + "        FROM app_toc_life_new_merchant_poi_list_df\n"
+                                                    + "          WHERE poi_list is not null \n"
+                                                    + "    ) t_detail")
+                                    .collect());
+            List<String> result = rows.stream().map(Row::toString).collect(Collectors.toList());
+            assertThat(result.toString())
+                    .isEqualTo(
+                            "[+I[t.1, poi_list, [1, 2, 3], t.1], +I[t.2, poi_list, [1, 2, 3], t.2]]");
+        } finally {
+            tableEnv.executeSql("drop table app_toc_life_new_merchant_poi_list_df");
+        }
+    }
+
     private void runQFile(File qfile) throws Exception {
         QTest qTest = extractQTest(qfile);
         for (int i = 0; i < qTest.statements.size(); i++) {
