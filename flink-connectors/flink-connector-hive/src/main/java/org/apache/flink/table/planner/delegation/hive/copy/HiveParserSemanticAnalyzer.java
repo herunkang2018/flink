@@ -1058,12 +1058,6 @@ public class HiveParserSemanticAnalyzer {
                     if (qbp.getJoinExpr() != null) {
                         queryProperties.setHasJoinFollowedByGroupBy(true);
                     }
-                    if (qbp.getSelForClause(ctx1.dest).getToken().getType()
-                            == HiveASTParser.TOK_SELECTDI) {
-                        throw new SemanticException(
-                                HiveParserUtils.generateErrorMessage(
-                                        ast, ErrorMsg.SELECT_DISTINCT_WITH_GROUPBY.getMsg()));
-                    }
                     qbp.setGroupByExprForClause(ctx1.dest, ast);
                     skipRecursion = true;
 

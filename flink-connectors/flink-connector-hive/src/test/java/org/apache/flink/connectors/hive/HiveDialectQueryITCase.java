@@ -938,6 +938,25 @@ public class HiveDialectQueryITCase {
         }
     }
 
+    @Test
+    public void testGroupByDistinct() throws Exception {
+        tableEnv.executeSql("create table t_distinct(a int, b int, id int)");
+        try {
+            tableEnv.executeSql(
+                            "insert into t values (1, 2, 3), (1, 3, 1), (2, 3, 5), (2, 3, 6), (3, 5, 10)")
+                    .await();
+
+            List<Row> rows =
+                    CollectionUtil.iteratorToList(
+                            tableEnv.executeSql(
+                                            "select distinct(a) as f1, min(id) as f2 from t group by a, b order by f1, f2")
+                                    .collect());
+            assertThat(rows.toString()).isEqualTo("[+I[1, 1], +I[1, 3], +I[2, 5], +I[3, 10]]");
+        } finally {
+            tableEnv.executeSql("drop table t_distinct");
+        }
+    }
+
     private void runQFile(File qfile) throws Exception {
         QTest qTest = extractQTest(qfile);
         for (int i = 0; i < qTest.statements.size(); i++) {
