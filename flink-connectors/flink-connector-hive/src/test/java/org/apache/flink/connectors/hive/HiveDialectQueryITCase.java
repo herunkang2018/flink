@@ -938,6 +938,46 @@ public class HiveDialectQueryITCase {
         }
     }
 
+    @Test
+    public void testTreePartColumn() throws Exception {
+        tableEnv.executeSql("CREATE TABLE tbool (id int, a int, b string, c boolean)");
+        tableEnv.executeSql("CREATE database t1");
+        tableEnv.executeSql("CREATE TABLE t1.tboo2 (id int, a int, b string, c boolean)");
+        try {
+            // test case 1
+            tableEnv.executeSql("insert into tbool values (1, 1, '3', true), (2, 3, '3', false)")
+                    .await();
+            List<Row> rows =
+                    CollectionUtil.iteratorToList(
+                            tableEnv.executeSql(
+                                            "select"
+                                                    + " default.tbool.id from tbool where default"
+                                                    + ".tbool.id = default"
+                                                    + ".tbool.a")
+                                    .collect());
+            assertThat(rows.toString()).isEqualTo("[+I[1]]");
+
+            // test case 2
+            tableEnv.executeSql("insert into t1.tboo2 values (1, 3, '2', false)").await();
+            // test compare boolean with numeric/string type
+            List<Row> results =
+                    CollectionUtil.iteratorToList(
+                            tableEnv.executeSql(
+                                            "select default.tbool.a, t1.tboo2.b,"
+                                                    + " tbool.c  from "
+                                                    + "default.tbool "
+                                                    + "join t1"
+                                                    + ".tboo2 where default.tbool.id = t1.tboo2.id")
+                                    .collect());
+            assertThat(results.toString()).isEqualTo("[+I[1, 2, true]]");
+
+        } finally {
+            tableEnv.executeSql("drop table tbool");
+            tableEnv.executeSql("drop database t1");
+            tableEnv.executeSql("drop table t1.tboo2");
+        }
+    }
+
     private void runQFile(File qfile) throws Exception {
         QTest qTest = extractQTest(qfile);
         for (int i = 0; i < qTest.statements.size(); i++) {

@@ -840,7 +840,8 @@ public class HiveParserCalcitePlanner {
                                     false);
                     colInfo = new ColumnInfo(fieldName, hiveType, tableAlias, false);
                     colInfo.setSkewedCol(HiveParserUtils.isSkewedCol(tableAlias, qb, fieldName));
-                    rowResolver.put(tableAlias, fieldName, colInfo);
+                    rowResolver.put(
+                            tableAlias, qb.getTabNameForAlias(tableAlias), fieldName, colInfo);
                 }
 
                 ObjectIdentifier tableIdentifier =

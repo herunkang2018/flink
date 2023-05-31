@@ -694,6 +694,45 @@ public class HiveParserTypeCheckProcFactory {
             }
 
             assert (expr.getChildCount() == 1);
+            // if it's like db.table.col, the tree will look like:
+            //                                dot
+            //                dot                    column_name
+            // TOK_TABLE_OR_COL   table_name
+            // database_name
+            if (parent != null
+                    && parent.getType() == HiveASTParser.DOT
+                    && parent.getChildCount() == 2
+                    && parent.getParent().getType() == HiveASTParser.DOT
+                    && parent.getParent().getChildCount() == 2) {
+                String databaseName = unescapeIdentifier(expr.getChild(0).getText());
+                String tableName = unescapeIdentifier(parent.getChild(1).getText());
+                if (input.hasDatabaseAlias(databaseName, tableName)) {
+                    // It's a database alias
+                    // We will process that later in DOT.
+                    return null;
+                } else {
+                    if (ctx.getOuterRR() != null
+                            && ctx.getOuterRR().hasDatabaseAlias(databaseName, tableName)) {
+                        // It's a database alias
+                        // We will process that later in DOT.
+                        return null;
+                    }
+
+                    List<String> possibleTableNames =
+                            input.getReferenceableTableAliases(databaseName, -1);
+                    String reason =
+                            String.format(
+                                    "(possible table names are: %s)",
+                                    StringUtils.join(possibleTableNames, ", "));
+                    ctx.setError(
+                            HiveParserErrorMsg.getMsg(
+                                    ErrorMsg.INVALID_TABLE_OR_COLUMN, parent.getChild(1), reason),
+                            expr);
+                    LOG.debug(ErrorMsg.INVALID_TABLE_OR_COLUMN + ":" + input);
+                    return null;
+                }
+            }
+
             String tableOrCol = unescapeIdentifier(expr.getChild(0).getText());
 
             boolean isTableAlias = input.hasTableAlias(tableOrCol);
@@ -1445,6 +1484,36 @@ public class HiveParserTypeCheckProcFactory {
             return !isNAN;
         }
 
+        protected ExprNodeDesc processComplexQualifiedColRef(
+                HiveParserTypeCheckCtx ctx, HiveParserASTNode expr, Object... nodeOutputs)
+                throws SemanticException {
+            HiveParserRowResolver input = ctx.getInputRR();
+            String tableAlias = unescapeIdentifier(expr.getChild(0).getChild(1).getText());
+            // NOTE: tableAlias must be a valid non-ambiguous table alias,
+            // because we've checked that in TOK_TABLE_OR_COL's process method.
+            String colName;
+            if (nodeOutputs[1] instanceof ExprNodeConstantDesc) {
+                colName = ((ExprNodeConstantDesc) nodeOutputs[1]).getValue().toString();
+            } else if (nodeOutputs[1] instanceof ExprNodeColumnDesc) {
+                colName = ((ExprNodeColumnDesc) nodeOutputs[1]).getColumn();
+            } else {
+                throw new SemanticException("Unexpected ExprNode : " + nodeOutputs[1]);
+            }
+            ColumnInfo colInfo = input.get(tableAlias, colName);
+
+            // Try outer Row resolverx
+            if (colInfo == null && ctx.getOuterRR() != null) {
+                HiveParserRowResolver outerRR = ctx.getOuterRR();
+                colInfo = outerRR.get(tableAlias, colName);
+            }
+            if (colInfo == null) {
+                ctx.setError(
+                        HiveParserErrorMsg.getMsg(ErrorMsg.INVALID_COLUMN, expr.getChild(1)), expr);
+                return null;
+            }
+            return toExprNodeDesc(colInfo);
+        }
+
         protected ExprNodeDesc processQualifiedColRef(
                 HiveParserTypeCheckCtx ctx, HiveParserASTNode expr, Object... nodeOutputs)
                 throws SemanticException {
@@ -1588,11 +1657,28 @@ public class HiveParserTypeCheckProcFactory {
                 return columnList;
             }
 
+            // if it's like db.table.col, the tree will look like:
+            //                                dot
+            //                dot                    column_name
+            // TOK_TABLE_OR_COL   table_name
+            // database_name
+            if (expr.getType() == HiveASTParser.DOT
+                    && expr.getChild(0).getType() == HiveASTParser.DOT
+                    && expr.getChild(0).getChild(0).getType() == HiveASTParser.TOK_TABLE_OR_COL
+                    && nodeOutputs[0] == null) {
+                return processComplexQualifiedColRef(ctx, expr, nodeOutputs);
+            }
+
             // If the first child is a TOK_TABLE_OR_COL, and nodeOutput[0] is NULL,
             // and the operator is a DOT, then it's a table column reference.
             if (expr.getType() == HiveASTParser.DOT
                     && expr.getChild(0).getType() == HiveASTParser.TOK_TABLE_OR_COL
                     && nodeOutputs[0] == null) {
+                // it's db.tab.col, return null
+                // We will process that later in DOT.
+                if (expr.getParent().getType() == HiveASTParser.DOT) {
+                    return null;
+                }
                 return processQualifiedColRef(ctx, expr, nodeOutputs);
             }
 
