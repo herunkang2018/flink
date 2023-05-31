@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -39,6 +40,7 @@ public class HiveParserRowResolver implements Serializable {
     private static final long serialVersionUID = 1L;
     private final RowSchema rowSchema;
     private final LinkedHashMap<String, LinkedHashMap<String, ColumnInfo>> rslvMap;
+    private final Map<String, String> tableAliasToFullPathAlias;
 
     private final HashMap<String, String[]> invRslvMap;
     /*
@@ -69,7 +71,8 @@ public class HiveParserRowResolver implements Serializable {
                 new HashMap<>(),
                 false,
                 new LinkedHashMap<>(),
-                false);
+                false,
+                new HashMap<>());
     }
 
     public HiveParserRowResolver(
@@ -80,7 +83,8 @@ public class HiveParserRowResolver implements Serializable {
             Map<String, HiveParserASTNode> expressionMap,
             boolean isExprResolver,
             LinkedHashMap<String, LinkedHashMap<String, String>> ambiguousColumns,
-            boolean checkForAmbiguity) {
+            boolean checkForAmbiguity,
+            Map<String, String> tableAliasToFullPathAlias) {
         this.rowSchema = rowSchema;
         this.rslvMap = rslvMap;
         this.invRslvMap = invRslvMap;
@@ -89,6 +93,7 @@ public class HiveParserRowResolver implements Serializable {
         this.isExprResolver = isExprResolver;
         this.ambiguousColumns = ambiguousColumns;
         this.checkForAmbiguity = checkForAmbiguity;
+        this.tableAliasToFullPathAlias = tableAliasToFullPathAlias;
     }
 
     /**
@@ -117,6 +122,11 @@ public class HiveParserRowResolver implements Serializable {
      */
     public HiveParserASTNode getExpressionSource(HiveParserASTNode node) {
         return expressionMap.get(node.toStringTree());
+    }
+
+    public void put(String tabAlias, String fullTablePath, String colAlias, ColumnInfo colInfo) {
+        put(tabAlias, colAlias, colInfo);
+        tableAliasToFullPathAlias.put(tabAlias, fullTablePath);
     }
 
     public void put(String tabAlias, String colAlias, ColumnInfo colInfo) {
@@ -185,6 +195,21 @@ public class HiveParserRowResolver implements Serializable {
         return rslvMap.get(tabAlias.toLowerCase()) != null;
     }
 
+    // to check whether exist a table is databaseAlias.tableAlias
+    public boolean hasDatabaseAlias(String databaseAlias, String tableAlias) {
+        for (Map.Entry<String, String> aliasEntry : tableAliasToFullPathAlias.entrySet()) {
+            String alias = aliasEntry.getKey();
+            String fullPath = aliasEntry.getValue();
+            if (alias.equals(tableAlias)) {
+                String database = fullPath.split("\\.")[1];
+                if (databaseAlias.equals(database)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /**
      * Gets the column Info to tab_alias.col_alias type of a column reference. I the tab_alias is
      * not provided as can be the case with an non aliased column, this function looks up the column
@@ -245,6 +270,25 @@ public class HiveParserRowResolver implements Serializable {
 
     public ArrayList<ColumnInfo> getColumnInfos() {
         return rowSchema.getSignature();
+    }
+
+    public List<String> getReferenceableTableAliases(String databaseAlias, int max) {
+        int count = 0;
+        Set<String> tableNames = new HashSet<>();
+        for (String tableFullPath : tableAliasToFullPathAlias.values()) {
+            if (max > 0 && count >= max) {
+                break;
+            }
+            // tableFullPath will be always be catalog.database.table
+            String[] paths = tableFullPath.split("\\.");
+            String database = paths[1];
+            String tableName = paths[2];
+            if (database.equals(databaseAlias)) {
+                tableNames.add(tableName);
+                count++;
+            }
+        }
+        return new ArrayList<>(tableNames);
     }
 
     // Get a list of aliases for non-hidden columns.
@@ -469,6 +513,9 @@ public class HiveParserRowResolver implements Serializable {
         if (!add(combinedRR, rightRR, outputColPos)) {
             LOG.warn("Duplicates detected when adding columns to RR: see previous message");
         }
+        // need to put all tableAlias to full path alias
+        combinedRR.tableAliasToFullPathAlias.putAll(leftRR.tableAliasToFullPathAlias);
+        combinedRR.tableAliasToFullPathAlias.putAll(rightRR.tableAliasToFullPathAlias);
         return combinedRR;
     }
 
@@ -481,7 +528,8 @@ public class HiveParserRowResolver implements Serializable {
                 new HashMap<>(expressionMap),
                 isExprResolver,
                 new LinkedHashMap<>(ambiguousColumns),
-                checkForAmbiguity);
+                checkForAmbiguity,
+                new HashMap<>(tableAliasToFullPathAlias));
     }
 
     public HiveParserNamedJoinInfo getNamedJoinInfo() {
