@@ -767,7 +767,7 @@ public class HiveParserRexNodeConverter {
         return newChildRexNodeLst;
     }
 
-    private boolean castExprUsingUDFBridge(GenericUDF gUDF) {
+    private static boolean castExprUsingUDFBridge(GenericUDF gUDF) {
         boolean castExpr = false;
         if (gUDF instanceof GenericUDFBridge) {
             String udfClassName = ((GenericUDFBridge) gUDF).getUdfClassName();
@@ -835,7 +835,7 @@ public class HiveParserRexNodeConverter {
         return null;
     }
 
-    private boolean isExplicitCast(GenericUDF udf) {
+    public static boolean isExplicitCast(GenericUDF udf) {
         return udf instanceof GenericUDFToChar
                 || udf instanceof GenericUDFToVarchar
                 || udf instanceof GenericUDFToDecimal
