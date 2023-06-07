@@ -31,6 +31,7 @@ import org.apache.flink.table.catalog.CatalogView;
 import org.apache.flink.table.catalog.ContextResolvedTable;
 import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.catalog.UnresolvedIdentifier;
+import org.apache.flink.table.planner.delegation.hive.HiveParserRexNodeConverter;
 import org.apache.flink.table.planner.delegation.hive.HiveParserTypeCheckProcFactory;
 import org.apache.flink.table.planner.delegation.hive.HiveParserUtils;
 import org.apache.flink.table.planner.delegation.hive.copy.HiveParserBaseSemanticAnalyzer.TableSpec;
@@ -84,6 +85,7 @@ import org.apache.hadoop.hive.ql.plan.ExprNodeColumnDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDescUtils;
 import org.apache.hadoop.hive.ql.plan.ExprNodeFieldDesc;
+import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.plan.HiveOperation;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.slf4j.Logger;
@@ -2062,6 +2064,18 @@ public class HiveParserSemanticAnalyzer {
     }
 
     public String recommendName(ExprNodeDesc exp, String colAlias) {
+        // handle with cast function
+        if (exp instanceof ExprNodeGenericFuncDesc) {
+            ExprNodeGenericFuncDesc funcDesc = (ExprNodeGenericFuncDesc) exp;
+            if (HiveParserRexNodeConverter.isExplicitCast(funcDesc.getGenericUDF())) {
+                if (exp.getCols().size() == 1) {
+                    return exp.getCols().get(0);
+                } else {
+                    return null;
+                }
+            }
+        }
+
         if (!colAlias.startsWith(autogenColAliasPrfxLbl)) {
             return null;
         }
@@ -2071,6 +2085,8 @@ public class HiveParserSemanticAnalyzer {
         }
         return null;
     }
+
+
 
     public String getAutogenColAliasPrfxLbl() {
         return this.autogenColAliasPrfxLbl;
