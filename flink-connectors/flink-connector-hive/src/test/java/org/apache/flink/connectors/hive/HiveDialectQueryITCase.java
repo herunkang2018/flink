@@ -938,6 +938,28 @@ public class HiveDialectQueryITCase {
         }
     }
 
+    @Test
+    public void testArrayToString() throws Exception {
+        List<Row> rows =
+                CollectionUtil.iteratorToList(
+                        tableEnv.executeSql("select cast(array('1', '2') as string)").collect());
+        assertThat(rows.toString()).isEqualTo("[+I[[1, 2]]]");
+
+        tableEnv.executeSql("create table t(a array<int>, b array<array<string>>)");
+
+        try{
+            tableEnv.executeSql("insert into t select array(1), array(array('1', '2'), array('2', "
+                    + "'3'))").await();
+            rows = CollectionUtil.iteratorToList(
+                    tableEnv.executeSql("select cast(a as string), cast(b as string) from t")
+                            .collect()
+            );
+            assertThat(rows.toString()).isEqualTo("[+I[[1], [[1, 2], [2, 3]]]]");
+        } finally{
+            tableEnv.executeSql("drop table t");
+        }
+    }
+
     private void runQFile(File qfile) throws Exception {
         QTest qTest = extractQTest(qfile);
         for (int i = 0; i < qTest.statements.size(); i++) {

@@ -22,6 +22,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.connectors.hive.FlinkHiveException;
 import org.apache.flink.table.catalog.hive.client.HiveShim;
 import org.apache.flink.table.module.hive.udf.generic.HiveGenericUDFInternalInterval;
+import org.apache.flink.table.module.hive.udf.generic.HiveGenericUDFToString;
 import org.apache.flink.table.planner.delegation.hive.copy.HiveASTParseUtils;
 import org.apache.flink.table.planner.delegation.hive.copy.HiveParserASTNode;
 import org.apache.flink.table.planner.delegation.hive.copy.HiveParserExprNodeColumnListDesc;
@@ -71,8 +72,10 @@ import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeFieldDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.udf.SettableUDF;
+import org.apache.hadoop.hive.ql.udf.UDFToString;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFBaseCompare;
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDFBridge;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFInternalInterval;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFNvl;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPAnd;
@@ -1276,7 +1279,12 @@ public class HiveParserTypeCheckProcFactory {
                                                         .toString())));
                     }
                     desc = ExprNodeGenericFuncDesc.newInstance(genericUDF, funcText, children);
-                } else {
+                } else if (genericUDF.getUdfName().equalsIgnoreCase(HiveGenericUDFToString.UDF_NAME)) {
+                    genericUDF = new HiveGenericUDFToString();
+                    desc = ExprNodeGenericFuncDesc.newInstance(genericUDF, funcText, children);
+                }
+
+                else {
                     desc = ExprNodeGenericFuncDesc.newInstance(genericUDF, funcText, children);
                 }
 

@@ -30,6 +30,7 @@ import org.apache.flink.table.module.hive.udf.generic.HiveGenericUDFArrayAccessS
 import org.apache.flink.table.module.hive.udf.generic.HiveGenericUDFGrouping;
 import org.apache.flink.table.module.hive.udf.generic.HiveGenericUDFInternalInterval;
 import org.apache.flink.table.module.hive.udf.generic.HiveGenericUDFToDecimal;
+import org.apache.flink.table.module.hive.udf.generic.HiveGenericUDFToString;
 import org.apache.flink.util.StringUtils;
 
 import org.apache.hadoop.hive.ql.exec.FunctionInfo;
@@ -158,6 +159,12 @@ public class HiveModule implements Module {
             return Optional.of(
                     factory.createFunctionDefinitionFromHiveFunction(
                             name, HiveGenericUDFToDecimal.class.getName(), context));
+        }
+
+        if (name.equalsIgnoreCase(HiveGenericUDFToString.NAME)) {
+            return Optional.of(
+                    factory.createFunctionDefinitionFromHiveFunction(
+                            name, HiveGenericUDFToString.class.getName(), context));
         }
 
         Optional<FunctionInfo> info = hiveShim.getBuiltInFunctionInfo(name);
